@@ -56,13 +56,26 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-slate-200 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-center">
-          <h1 className="text-3xl font-bold text-slate-800 text-center flex-1">
-            Seguimiento de Progreso Curricular UCN
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-center relative">
+          {/* Logo DISC.2HD al lado de la S de Seguimiento */}
+          <img
+            src="/DISC.2HD.png"
+            alt="Logo DISC"
+            className="h-16 w-auto mr-3"
+            style={{ maxHeight: 64 }}
+          />
+          <h1 className="text-4xl font-extrabold text-slate-800 text-center flex items-center">
+            Seguimiento de Progreso Curricular&nbsp;UCN
+            <img
+              src="/Escudo-UCN-Full.png"
+              alt="Escudo UCN"
+              className="h-14 w-auto ml-3 align-middle"
+              style={{ maxHeight: 56 }}
+            />
           </h1>
           {/* Botón Descargar */}
           <button
-            className="absolute right-6 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
+            className="ml-6 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
             onClick={() => {
               const total = getAllSubjects().length;
               const completadas = Array.from(completedSubjects);
@@ -161,12 +174,12 @@ function App() {
       )}
 
       {/* Footer personalizado */}
-      <footer className="mt-12 mb-4 flex flex-col items-center text-slate-600">
-        <div className="flex items-center space-x-2">
-          <span className="text-2xl">📧</span>
-          <span className="text-base">jean.garnica@alumnos.ucn.cl</span>
+      <footer className="mt-16 mb-6 flex flex-col items-center text-slate-600">
+        <div className="flex items-center space-x-3">
+          <span className="text-3xl">📧</span>
+          <span className="text-lg font-semibold">jean.garnica@alumnos.ucn.cl</span>
         </div>
-        <div className="mt-1 text-sm text-center">
+        <div className="mt-2 text-base text-center font-medium">
           Ingeniería en Computación e Informática - Universidad Católica del Norte
         </div>
       </footer>

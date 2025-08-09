@@ -57,7 +57,11 @@ export const curriculumData: Record<number, Semester> = {
         prerequisites: ['Proyecto de Arquitectura de Computadores', 'Arquitectura de Computadores'],
         semester: 4 
       },
-      { name: 'Redes de Computadores', prerequisites: ['Sistemas Operativos'], semester: 4 },
+      { 
+        name: 'Redes de Computadores', 
+        prerequisites: ['Proyecto de Arquitectura de Computadores'], // Corregido aquí
+        semester: 4 
+      },
       { name: 'Estructura de Datos', prerequisites: ['Programación Avanzada'], semester: 4 },
       { name: 'Formación General Valórica III', prerequisites: [], semester: 4 },
       { name: 'Proyecto Programación Avanzada', prerequisites: ['Programación Avanzada'], semester: 4 } // Corregido aquí
