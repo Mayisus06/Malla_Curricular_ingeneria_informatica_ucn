@@ -1,6 +1,6 @@
 import React from 'react';
 import { Subject } from '../types';
-import { X, BookOpen, ArrowRight, CheckCircle, Circle, Lock } from 'lucide-react';
+import { X, BookOpen, ArrowRight, CheckCircle, Circle, Lock, Info } from 'lucide-react';
 
 interface SubjectModalProps {
   subject: Subject;
@@ -10,12 +10,12 @@ interface SubjectModalProps {
   onClose: () => void;
 }
 
-const SubjectModal: React.FC<SubjectModalProps> = ({ 
-  subject, 
-  isCompleted, 
-  isAvailable, 
-  onToggleComplete, 
-  onClose 
+const SubjectModal: React.FC<SubjectModalProps> = ({
+  subject,
+  isCompleted,
+  isAvailable,
+  onToggleComplete,
+  onClose
 }) => {
   const getSemesterColor = (semester: number) => {
     const colors = {
@@ -62,6 +62,11 @@ const SubjectModal: React.FC<SubjectModalProps> = ({
   const statusInfo = getStatusInfo();
   const StatusIcon = statusInfo.icon;
 
+  // helpers locales para nota informativa
+  const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const isProfessionalElective = norm(subject.name).includes('electivo profesional');
+  const isEmprendimiento = norm(subject.name).includes('emprendimiento');
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all">
@@ -87,7 +92,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({
               {subject.name}
             </h3>
             <div className="flex items-center space-x-2">
-              <span 
+              <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-white ${getSemesterColor(subject.semester)}`}
               >
                 Semestre {subject.semester}
@@ -108,8 +113,8 @@ const SubjectModal: React.FC<SubjectModalProps> = ({
                 <button
                   onClick={onToggleComplete}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isCompleted 
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                    isCompleted
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
                       : 'bg-green-100 text-green-700 hover:bg-green-200'
                   }`}
                 >
@@ -119,17 +124,17 @@ const SubjectModal: React.FC<SubjectModalProps> = ({
             </div>
           </div>
 
-          {/* Prerequisites Section */}
+          {/* Prerrequisitos Section */}
           <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
             <h4 className="text-xl font-semibold text-slate-800 mb-4 flex items-center">
               <ArrowRight className="h-5 w-5 mr-2" />
               Prerrequisitos
             </h4>
-            
+
             {subject.prerequisites.length > 0 ? (
               <div className="space-y-3">
                 {subject.prerequisites.map((prereq, index) => (
-                  <div 
+                  <div
                     key={index}
                     className="flex items-center p-3 bg-white rounded-lg border border-slate-200 shadow-sm"
                   >
@@ -145,6 +150,17 @@ const SubjectModal: React.FC<SubjectModalProps> = ({
                 </div>
                 <p className="text-slate-600 font-medium">No requiere prerrequisitos</p>
                 <p className="text-slate-500 text-sm mt-1">Esta materia se puede cursar sin materias previas</p>
+              </div>
+            )}
+
+            {/* Nota especial para Electivo Profesional y Emprendimiento */}
+            {(isProfessionalElective || isEmprendimiento) && (
+              <div className="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50 flex items-start gap-3">
+                <Info className="h-5 w-5 text-amber-600 mt-0.5" />
+                <p className="text-amber-800 text-sm">
+                  Regla general: <strong>esta materia</strong> se habilita solo cuando
+                  tengas aprobados <strong>todos los ramos de Semestres 1, 2 y 3</strong>.
+                </p>
               </div>
             )}
           </div>

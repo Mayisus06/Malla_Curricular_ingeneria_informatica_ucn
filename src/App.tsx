@@ -5,7 +5,6 @@ import SubjectGrid from './components/SubjectGrid';
 import SubjectModal from './components/SubjectModal';
 import SearchBar from './components/SearchBar';
 import ProgressSummary from './components/ProgressSummary';
-// import { curriculumData } from './data/curriculumData';
 import { curriculumData as baseCurriculumData } from './data/curriculumData';
 import { Subject } from './types';
 
@@ -14,7 +13,8 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [completedSubjects, setCompletedSubjects] = useState<Set<string>>(new Set());
 
-  // normalizar: sin acentos, colapsar espacios, minúsculas
+  // util: normalizar texto (sin tildes, espacios colapsados, minusculas)
+  // comentarios en minusculas y sin tildes
   const norm = (s: string) =>
     s
       .normalize('NFD')
@@ -23,15 +23,43 @@ function App() {
       .trim()
       .toLowerCase();
 
-  // parche runtime: F.G. Comunicacional II requiere F.G. Comunicacional I
+  // detectar si un ramo es electivo profesional
+  const isProfessionalElective = (s: Subject) =>
+    norm(s.name).includes('electivo profesional');
+
+  // detectar si es "emprendimiento" (cubre variaciones como "taller de emprendimiento")
+  const isEmprendimiento = (s: Subject) =>
+    norm(s.name).includes('emprendimiento');
+
+  // regla global: materias que requieren tener completo 1–3 antes de habilitarse
+  const requiresFirstThreeCompleted = (s: Subject) =>
+    isProfessionalElective(s) || isEmprendimiento(s);
+
+  // parches runtime (sin tocar tu data original):
+  // - f.g. comunicacional ii -> requiere f.g. comunicacional i
+  // - f.g. valorica ii -> requiere f.g. valorica i
+  // - f.g. valorica iii -> requiere f.g. valorica ii
   const curriculumData = useMemo(() => {
     const clone = JSON.parse(JSON.stringify(baseCurriculumData)) as typeof baseCurriculumData;
     Object.values(clone).forEach(sem => {
-      sem.subjects = sem.subjects.map(s =>
-        s.name === 'Formación General Comunicacional II'
-          ? { ...s, prerequisites: ['Formación General Comunicacional I'] }
-          : s
-      );
+      sem.subjects = sem.subjects.map(s => {
+        if (s.name === 'Formación General Comunicacional II') {
+          const reqs = new Set([...(s.prerequisites || [])]);
+          reqs.add('Formación General Comunicacional I');
+          return { ...s, prerequisites: Array.from(reqs) };
+        }
+        if (s.name === 'Formación General Valórica II') {
+          const reqs = new Set([...(s.prerequisites || [])]);
+          reqs.add('Formación General Valórica I');
+          return { ...s, prerequisites: Array.from(reqs) };
+        }
+        if (s.name === 'Formación General Valórica III') {
+          const reqs = new Set([...(s.prerequisites || [])]);
+          reqs.add('Formación General Valórica II');
+          return { ...s, prerequisites: Array.from(reqs) };
+        }
+        return s;
+      });
     });
     return clone;
   }, []);
@@ -40,21 +68,48 @@ function App() {
   const getAllSubjects = (): Subject[] =>
     Object.values(curriculumData).flatMap(s => s.subjects);
 
-  // disponible solo si TODOS sus prerrequisitos están completados (comparación normalizada)
+  // verificar si todos los ramos hasta un semestre estan aprobados
+  const hasApprovedUpToSemester = (limit: number, completed: Set<string>) => {
+    const completedNorm = new Set(Array.from(completed).map(norm));
+    return getAllSubjects()
+      .filter(s => s.semester <= limit)
+      .every(s => completedNorm.has(norm(s.name)));
+  };
+
+  // disponible solo si:
+  // a) si requiere 1–3 completos -> verificar esa condicion
+  // b) ademas, cumplir todos sus prerrequisitos explicitos
   const isSubjectAvailable = (subject: Subject): boolean => {
-    if (!subject.prerequisites || subject.prerequisites.length === 0) return true;
+    if (requiresFirstThreeCompleted(subject) && !hasApprovedUpToSemester(3, completedSubjects)) {
+      return false;
+    }
+    const prereqs = subject.prerequisites || [];
+    if (prereqs.length === 0) return true;
     const completedNorm = new Set(Array.from(completedSubjects).map(norm));
-    return subject.prerequisites.every(pr => completedNorm.has(norm(pr)));
+    return prereqs.every(pr => completedNorm.has(norm(pr)));
   };
 
   const handleSubjectClick = (subject: Subject) => setSelectedSubject(subject);
   const handleCloseModal = () => setSelectedSubject(null);
 
-  // eliminar dependientes en cascada (recursivo, a través de todo el plan)
+  // eliminar dependientes en cascada (recursivo)
+  // tambien aplica la regla global: si 1–3 no estan completos, elimina electivos y emprendimiento marcados
   const removeDependentSubjects = (toRemove: Set<string>, completed: Set<string>) => {
     let changed = false;
-    const toRemoveNorm = new Set(Array.from(toRemove).map(norm));
 
+    // 0) regla global 1–3 completos
+    if (!hasApprovedUpToSemester(3, completed)) {
+      for (const s of getAllSubjects()) {
+        if (requiresFirstThreeCompleted(s) && completed.has(s.name)) {
+          completed.delete(s.name);
+          toRemove.add(s.name);
+          changed = true;
+        }
+      }
+    }
+
+    // 1) cascada por prerrequisitos explicitos
+    const toRemoveNorm = new Set(Array.from(toRemove).map(norm));
     for (const s of getAllSubjects()) {
       if (!completed.has(s.name)) continue;
       const dependsOnRemoved = (s.prerequisites || []).some(pr => toRemoveNorm.has(norm(pr)));
@@ -65,6 +120,7 @@ function App() {
         changed = true;
       }
     }
+
     if (changed) removeDependentSubjects(toRemove, completed);
   };
 
@@ -73,12 +129,12 @@ function App() {
     setCompletedSubjects(prev => {
       const next = new Set(prev);
       if (next.has(subjectName)) {
-        // desmarcando -> quita dependientes
+        // desmarcando -> quita dependientes y aplica regla global
         next.delete(subjectName);
         const toRemove = new Set<string>([subjectName]);
         removeDependentSubjects(toRemove, next);
       } else {
-        // marcando -> solo si está disponible
+        // marcando -> solo si esta disponible
         const subj = getAllSubjects().find(s => s.name === subjectName);
         if (!subj || !isSubjectAvailable(subj)) return next;
         next.add(subjectName);
@@ -89,7 +145,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Header */}
+      {/* header */}
       <header className="bg-white shadow-lg border-b border-slate-200 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-center relative">
           <img src="/DISC.2HD.png" alt="Logo DISC" className="h-16 w-auto mr-3" style={{ maxHeight: 64 }} />
@@ -98,7 +154,7 @@ function App() {
             <img src="/Escudo-UCN-Full.png" alt="Escudo UCN" className="h-14 w-auto ml-3 align-middle" style={{ maxHeight: 56 }} />
           </h1>
 
-          {/* Descargar PDF */}
+          {/* descargar pdf */}
           <button
             className="ml-6 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
             onClick={() => {
@@ -142,23 +198,23 @@ function App() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Resumen */}
+        {/* resumen */}
         <ProgressSummary 
           completedSubjects={completedSubjects}
           totalSubjects={getAllSubjects().length}
         />
 
-        {/* Búsqueda */}
+        {/* busqueda */}
         <SearchBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
 
-        {/* Por semestre */}
+        {/* por semestre */}
         {Object.values(curriculumData).map(semester => {
           const disponibles = semester.subjects.filter(isSubjectAvailable);
           const allSelected = disponibles.length > 0 && disponibles.every(s => completedSubjects.has(s.name));
 
           return (
             <div key={semester.number} className="mb-8 bg-white rounded-xl shadow-lg p-6 border border-slate-200">
-              {/* Título + botón */}
+              {/* titulo + boton */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-slate-800">Semestre {semester.number}</h2>
 
@@ -185,7 +241,7 @@ function App() {
                 </button>
               </div>
 
-              {/* Grid de ramos */}
+              {/* grid de ramos */}
               <SubjectGrid
                 subjects={semester.subjects}
                 completedSubjects={completedSubjects}
@@ -199,7 +255,7 @@ function App() {
         })}
       </div>
 
-      {/* Modal */}
+      {/* modal */}
       {selectedSubject && (
         <SubjectModal
           subject={selectedSubject}
@@ -210,7 +266,7 @@ function App() {
         />
       )}
 
-      {/* Footer */}
+      {/* footer */}
       <footer className="mt-16 mb-6 flex flex-col items-center text-slate-600">
         <div className="flex items-center space-x-3">
           <span className="text-3xl">📧</span>

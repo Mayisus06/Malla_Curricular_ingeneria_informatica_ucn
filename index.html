@@ -1,13 +1,95 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Malla Curricular Interactiva de Ingeniería</title>
+    <title>Seguimiento de Progreso Curricular UCN</title>
+
+    <!-- Estilos inline para el fallback sin JS -->
+    <style>
+      /* Fallback si JS está desactivado */
+      noscript .nojs-overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #0f172a; /* slate-900 */
+        color: #e2e8f0;      /* slate-200 */
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
+        text-align: center;
+        z-index: 99999;
+      }
+      noscript .nojs-card {
+        max-width: 720px;
+        width: 100%;
+        background: #111827; /* gray-900 */
+        border: 1px solid #374151; /* gray-700 */
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      }
+      noscript h1 { margin: 0 0 8px; font-size: 24px; }
+      noscript p  { margin: 6px 0; line-height: 1.5; }
+      noscript .small { opacity: .8; font-size: 14px; }
+      noscript .cta {
+        display: inline-block; margin-top: 12px; padding: 10px 14px;
+        background: #2563eb; color: white; text-decoration: none; border-radius: 10px;
+      }
+
+      /* Boot (placeholder visible antes de que React monte) */
+      #boot {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #f8fafc, #eff6ff);
+        color: #0f172a;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
+      }
+      #boot .box {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 20px 30px rgba(15, 23, 42, .08);
+        text-align: center;
+        max-width: 560px;
+      }
+      #boot .muted { color: #475569; font-size: 14px; margin-top: 6px; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Mensaje visible SOLO si JS está desactivado -->
+    <noscript>
+      <div class="nojs-overlay" role="alert" aria-live="assertive">
+        <div class="nojs-card">
+          <h1>JavaScript está desactivado</h1>
+          <p>Para usar “Seguimiento de Progreso Curricular UCN” necesitas habilitar JavaScript en tu navegador.</p>
+          <p class="small">En Google Chrome: <em>Configuración → Privacidad y seguridad → Configuración del sitio → JavaScript</em>.</p>
+          <a class="cta" href="https://support.google.com/chrome/answer/114662" target="_blank" rel="noopener noreferrer">
+            Cómo habilitar JavaScript
+          </a>
+        </div>
+      </div>
+    </noscript>
+
+    <!-- Contenedor de la app -->
+    <div id="root">
+      <!-- Boot screen (se reemplaza cuando React monta correctamente) -->
+      <div id="boot">
+        <div class="box">
+          <div style="font-size: 18px; font-weight: 700; margin-bottom: 6px;">
+            Cargando aplicación…
+          </div>
+          <div class="muted">
+            Si ves esta pantalla por mucho tiempo, intenta recargar la página.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tu bundle de React -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
