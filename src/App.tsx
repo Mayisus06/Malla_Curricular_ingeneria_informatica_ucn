@@ -14,47 +14,32 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [completedSubjects, setCompletedSubjects] = useState<Set<string>>(new Set());
 
-  // utils de texto
+  // utils
   const norm = (s: string) =>
-    s
+    (s || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase();
 
-  const normStrong = (s: string) =>
-    norm(s)
-      .replace(/[^a-z0-9 ]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const matchName = (a: string, b: string) => {
-    const na = normStrong(a);
-    const nb = normStrong(b);
-    return na === nb || na.includes(nb) || nb.includes(na);
-  };
-
-  const hasCompletedPrereqGiven = (pr: string, completed: Set<string>) => {
-    for (const done of completed) if (matchName(pr, done)) return true;
-    return false;
-  };
+  const eq = (a: string, b: string) => norm(a) === norm(b);
 
   // reglas globales
   const isProfessionalElective = (s: Subject) => norm(s.name).includes('electivo profesional');
   const isEmprendimiento = (s: Subject) => norm(s.name).includes('emprendimiento');
   const requiresFirstThreeCompleted = (s: Subject) => isProfessionalElective(s) || isEmprendimiento(s);
 
-  // meta-prerrequisito: texto "haber completado todos los semestres anteriores"
-  const isMetaAllPrevSemesters = (txt: string) => normStrong(txt).includes('semestres anteriores');
+  // meta prerrequisito: texto tipo "haber completado todos los semestres anteriores"
+  const isMetaAllPrevSemesters = (txt: string) => norm(txt).includes('semestres anteriores');
 
   // clonar y parchear data sin tocar el json original
   const curriculumData = useMemo(() => {
     const clone = JSON.parse(JSON.stringify(baseCurriculumData)) as typeof baseCurriculumData;
 
-    // prerequisitos corregidos en formaciones generales
     Object.values(clone).forEach(sem => {
       sem.subjects = sem.subjects.map(s => {
+        // formaciones generales
         if (s.name === 'Formación General Comunicacional II') {
           const reqs = new Set([...(s.prerequisites || [])]);
           reqs.add('Formación General Comunicacional I');
@@ -70,74 +55,73 @@ function App() {
           reqs.add('Formación General Valórica II');
           return { ...s, prerequisites: Array.from(reqs) };
         }
+
+        // parches pedidos
+        if (s.name === 'Estadística') {
+          const reqs = new Set([...(s.prerequisites || [])]);
+          reqs.add('Cálculo II');
+          return { ...s, prerequisites: Array.from(reqs) };
+        }
+
+        if (s.name === 'Arquitectura de Computadores') {
+          const reqs = new Set([...(s.prerequisites || [])]);
+          reqs.add('Álgebra II');
+          return { ...s, prerequisites: Array.from(reqs) };
+        }
+
         return s;
       });
     });
 
-    // no agregamos nada extra al capstone
     return clone;
   }, []);
 
   const getAllSubjects = (): Subject[] => Object.values(curriculumData).flatMap(s => s.subjects);
 
-  // helper: revisa si todos los ramos hasta cierto semestre estan aprobados (conjunto dado)
-  const hasApprovedUpToSemesterGiven = (limit: number, completed: Set<string>) =>
-    getAllSubjects().filter(s => s.semester <= limit).every(s => completed.has(s.name));
+  // helper: todos los ramos hasta un semestre estan aprobados
+  const hasApprovedUpToSemester = (limit: number, completed: Set<string>) => {
+    const completedNorm = new Set(Array.from(completed).map(norm));
+    return getAllSubjects()
+      .filter(s => s.semester <= limit)
+      .every(s => completedNorm.has(norm(s.name)));
+  };
 
-  // version parametrizada (usa un set arbitrario)
-  const isSubjectAvailableGiven = (subject: Subject, completed: Set<string>): boolean => {
-    // regla global 1-3 para electivos y emprendimiento
-    if (requiresFirstThreeCompleted(subject) && !hasApprovedUpToSemesterGiven(3, completed)) {
+  // disponible si cumple reglas globales, meta regla y prerrequisitos reales exactos
+  const isSubjectAvailable = (subject: Subject): boolean => {
+    // regla global para electivos profesionales y emprendimiento
+    if (requiresFirstThreeCompleted(subject) && !hasApprovedUpToSemester(3, completedSubjects)) {
       return false;
     }
 
     const prereqs = subject.prerequisites || [];
+    const hasMeta = prereqs.some(isMetaAllPrevSemesters);
 
-    // meta-regla del capstone u otros ramos que lo incluyan por texto
-    const needAllPrev = prereqs.some(isMetaAllPrevSemesters);
-    if (needAllPrev && !hasApprovedUpToSemesterGiven(subject.semester - 1, completed)) {
+    // meta: si pide "semestres anteriores", validar todos los previos al semestre del ramo
+    if (hasMeta && !hasApprovedUpToSemester(subject.semester - 1, completedSubjects)) {
       return false;
     }
 
-    // validar solo prerrequisitos reales (excluye la meta-regla)
+    // chequear solo prerrequisitos reales por igualdad estricta
     const realPrereqs = prereqs.filter(pr => !isMetaAllPrevSemesters(pr));
     if (realPrereqs.length === 0) return true;
 
-    return realPrereqs.every(pr => hasCompletedPrereqGiven(pr, completed));
+    const completedNorm = new Set(Array.from(completedSubjects).map(norm));
+    return realPrereqs.every(pr => completedNorm.has(norm(pr)));
   };
-
-  // wrapper contra el estado real
-  const isSubjectAvailable = (subject: Subject): boolean =>
-    isSubjectAvailableGiven(subject, completedSubjects);
 
   const handleSubjectClick = (subject: Subject) => setSelectedSubject(subject);
   const handleCloseModal = () => setSelectedSubject(null);
 
-  // cascada al desmarcar: quita dependencias por nombre, reglas globales y
-  // ademas remueve cualquier ramo que YA NO ESTE DISPONIBLE con el nuevo set.
+  // cascada al desmarcar, incluyendo la meta regla del capstone
   const removeDependentSubjects = (toRemove: Set<string>, completed: Set<string>) => {
     let changed = true;
     while (changed) {
       changed = false;
-      const toRemoveArr = Array.from(toRemove);
 
-      // 1) dependencias por prerrequisito (match robusto)
-      for (const s of getAllSubjects()) {
-        if (!completed.has(s.name)) continue;
-        const dependsOnRemoved = (s.prerequisites || []).some(pr =>
-          toRemoveArr.some(r => matchName(pr, r))
-        );
-        if (dependsOnRemoved) {
-          completed.delete(s.name);
-          toRemove.add(s.name);
-          changed = true;
-        }
-      }
-
-      // 2) regla global: electivos/emprendimiento requieren 1..3 aprobados
-      if (!hasApprovedUpToSemesterGiven(3, completed)) {
+      // regla global 1..3 para electivos y emprendimiento
+      if (!hasApprovedUpToSemester(3, completed)) {
         for (const s of getAllSubjects()) {
-          if (completed.has(s.name) && requiresFirstThreeCompleted(s)) {
+          if ((isProfessionalElective(s) || isEmprendimiento(s)) && completed.has(s.name)) {
             completed.delete(s.name);
             toRemove.add(s.name);
             changed = true;
@@ -145,22 +129,41 @@ function App() {
         }
       }
 
-      // 3) meta-regla por texto: "semestres anteriores"
+      // dependencias explicitas exactas
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
-        const needAllPrev = (s.prerequisites || []).some(isMetaAllPrevSemesters);
-        if (needAllPrev && !hasApprovedUpToSemesterGiven(s.semester - 1, completed)) {
+        const prereqs = (s.prerequisites || []).filter(pr => !isMetaAllPrevSemesters(pr));
+        const ok = prereqs.every(pr => Array.from(completed).some(done => eq(done, pr)));
+        if (!ok) {
           completed.delete(s.name);
           toRemove.add(s.name);
           changed = true;
         }
       }
 
-      // 4) verificacion general: si un ramo seleccionado ya NO esta disponible
-      // segun las reglas (con el set actualizado), removerlo tambien.
+      // meta: si pierde algun ramo previo, capstone y similares caen
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
-        if (!isSubjectAvailableGiven(s, completed)) {
+        const hasMeta = (s.prerequisites || []).some(isMetaAllPrevSemesters);
+        if (hasMeta && !hasApprovedUpToSemester(s.semester - 1, completed)) {
+          completed.delete(s.name);
+          toRemove.add(s.name);
+          changed = true;
+        }
+      }
+
+      // verificacion final general
+      for (const s of getAllSubjects()) {
+        if (!completed.has(s.name)) continue;
+        const prereqs = s.prerequisites || [];
+        const hasMeta = prereqs.some(isMetaAllPrevSemesters);
+        const realPrereqs = prereqs.filter(pr => !isMetaAllPrevSemesters(pr));
+        const completedNorm = new Set(Array.from(completed).map(norm));
+        const ok =
+          (!requiresFirstThreeCompleted(s) || hasApprovedUpToSemester(3, completed)) &&
+          (!hasMeta || hasApprovedUpToSemester(s.semester - 1, completed)) &&
+          realPrereqs.every(pr => completedNorm.has(norm(pr)));
+        if (!ok) {
           completed.delete(s.name);
           toRemove.add(s.name);
           changed = true;
@@ -173,12 +176,12 @@ function App() {
     setCompletedSubjects(prev => {
       const next = new Set(prev);
       if (next.has(subjectName)) {
-        // desmarcando -> cascada total
+        // desmarcar -> cascada
         next.delete(subjectName);
         const toRemove = new Set<string>([subjectName]);
         removeDependentSubjects(toRemove, next);
       } else {
-        // marcando -> solo si esta disponible
+        // marcar -> solo si esta disponible
         const subj = getAllSubjects().find(s => s.name === subjectName);
         if (!subj || !isSubjectAvailable(subj)) return next;
         next.add(subjectName);
@@ -192,10 +195,10 @@ function App() {
       {/* header */}
       <header className="bg-white shadow-lg border-b border-slate-200 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-center relative">
-          <img src="/DISC.2HD.png" alt="Logo DISC" className="h-16 w-auto mr-3" style={{ maxHeight: 64 }} />
+          <img src="/DISC.2HD.png" alt="logo disc" className="h-16 w-auto mr-3" style={{ maxHeight: 64 }} />
           <h1 className="text-4xl font-extrabold text-slate-800 text-center flex items-center">
             Seguimiento de Progreso Curricular&nbsp;UCN
-            <img src="/Escudo-UCN-Full.png" alt="Escudo UCN" className="h-14 w-auto ml-3 align-middle" style={{ maxHeight: 56 }} />
+            <img src="/Escudo-UCN-Full.png" alt="escudo ucn" className="h-14 w-auto ml-3 align-middle" style={{ maxHeight: 56 }} />
           </h1>
 
           {/* boton descargar */}
@@ -210,7 +213,7 @@ function App() {
                 const subject = getAllSubjects().find(s => s.name === name);
                 return {
                   nombre: name,
-                  prerequisitos: subject?.prerequisites || [],
+                  prerrequisitos: subject?.prerequisites || [],
                   disponible: subject ? (isSubjectAvailable(subject) ? 'Si' : 'No') : 'No'
                 };
               });
@@ -229,7 +232,7 @@ function App() {
               let y = 70;
               materias.forEach((m, i) => {
                 doc.text(
-                  `${i + 1}. ${m.nombre} | Prerrequisitos: ${m.prerequisitos.join(', ') || 'Ninguno'} | Disponible: ${m.disponible}`,
+                  `${i + 1}. ${m.nombre} | Prerrequisitos: ${m.prerrequisitos.join(', ') || 'Ninguno'} | Disponible: ${m.disponible}`,
                   14,
                   y
                 );
@@ -291,8 +294,8 @@ function App() {
               <SubjectGrid
                 subjects={semester.subjects}
                 completedSubjects={completedSubjects}
-                onSubjectClick={handleSubjectClick}
-                onSubjectToggle={handleSubjectToggle}
+                onSubjectClick={(s) => handleSubjectClick(s)}
+                onSubjectToggle={(name) => handleSubjectToggle(name)}
                 isSubjectAvailable={isSubjectAvailable}
                 searchTerm={searchTerm}
               />
