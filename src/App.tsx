@@ -1,4 +1,4 @@
-// App.tsx
+// app.tsx
 // comentarios en minusculas y sin tildes
 import React, { useMemo, useState } from 'react';
 import jsPDF from 'jspdf';
@@ -192,65 +192,89 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* header */}
-      <header className="bg-white shadow-lg border-b border-slate-200 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-center relative">
-          <img src="/DISC.2HD.png" alt="logo disc" className="h-16 w-auto mr-3" style={{ maxHeight: 64 }} />
-          <h1 className="text-4xl font-extrabold text-slate-800 text-center flex items-center">
-            Seguimiento de Progreso Curricular&nbsp;UCN
-            <img src="/Escudo-UCN-Full.png" alt="escudo ucn" className="h-14 w-auto ml-3 align-middle" style={{ maxHeight: 56 }} />
-          </h1>
+      {/* header responsive para movil */}
+      <header className="bg-white shadow-lg border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {/* en movil se apila; en sm+ se usa grilla: logo - titulo - escudo */}
+          <div className="flex flex-col items-center gap-3 sm:grid sm:grid-cols-[auto,1fr,auto] sm:items-center">
+            {/* logo izq */}
+            <img
+              src="/DISC.2HD.png"
+              alt="logo disc"
+              className="h-10 w-auto sm:h-16 justify-self-start"
+            />
 
-          {/* boton descargar */}
-          <button
-            className="ml-6 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
-            onClick={() => {
-              const total = getAllSubjects().length;
-              const completadas = Array.from(completedSubjects);
-              const porcentaje = total === 0 ? 0 : Math.round((completadas.length / total) * 100);
+            {/* titulo adaptativo */}
+            <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-tight text-center">
+              Seguimiento de Progreso Curricular UCN
+            </h1>
 
-              const materias = completadas.map(name => {
-                const subject = getAllSubjects().find(s => s.name === name);
-                return {
-                  nombre: name,
-                  prerrequisitos: subject?.prerequisites || [],
-                  disponible: subject ? (isSubjectAvailable(subject) ? 'Si' : 'No') : 'No'
-                };
-              });
+            {/* escudo der oculto en movil para evitar solapado */}
+            <img
+              src="/Escudo-UCN-Full.png"
+              alt="escudo ucn"
+              className="hidden sm:block h-14 w-auto justify-self-end"
+            />
 
-              const doc = new jsPDF();
-              doc.setFontSize(18);
-              doc.text('Seguimiento de Progreso Curricular UCN', 14, 18);
+            {/* fila extra visible en movil: escudo + boton a todo el ancho */}
+            <div className="w-full sm:w-auto sm:col-span-3 flex items-center justify-center gap-3">
+              <img
+                src="/Escudo-UCN-Full.png"
+                alt="escudo ucn"
+                className="h-10 w-auto sm:hidden"
+              />
+              <button
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
+                onClick={() => {
+                  const total = getAllSubjects().length;
+                  const completadas = Array.from(completedSubjects);
+                  const porcentaje = total === 0 ? 0 : Math.round((completadas.length / total) * 100);
 
-              doc.setFontSize(12);
-              doc.text('Resumen:', 14, 30);
-              doc.text(`Total de materias: ${total}`, 14, 38);
-              doc.text(`Completadas: ${completadas.length}`, 14, 44);
-              doc.text(`Porcentaje: ${porcentaje}%`, 14, 50);
-              doc.text('Materias completadas:', 14, 62);
+                  const materias = completadas.map(name => {
+                    const subject = getAllSubjects().find(s => s.name === name);
+                    return {
+                      nombre: name,
+                      prerrequisitos: subject?.prerequisites || [],
+                      disponible: subject ? (isSubjectAvailable(subject) ? 'Si' : 'No') : 'No'
+                    };
+                  });
 
-              let y = 70;
-              materias.forEach((m, i) => {
-                doc.text(
-                  `${i + 1}. ${m.nombre} | Prerrequisitos: ${m.prerrequisitos.join(', ') || 'Ninguno'} | Disponible: ${m.disponible}`,
-                  14,
-                  y
-                );
-                y += 8;
-                if (y > 270) {
-                  doc.addPage();
-                  y = 20;
-                }
-              });
+                  const doc = new jsPDF();
+                  doc.setFontSize(18);
+                  doc.text('Seguimiento de Progreso Curricular UCN', 14, 18);
 
-              doc.save('progreso_curricular_ucn.pdf');
-            }}
-          >
-            Descargar
-          </button>
+                  doc.setFontSize(12);
+                  doc.text('Resumen:', 14, 30);
+                  doc.text(`Total de materias: ${total}`, 14, 38);
+                  doc.text(`Completadas: ${completadas.length}`, 14, 44);
+                  doc.text(`Porcentaje: ${porcentaje}%`, 14, 50);
+                  doc.text('Materias completadas:', 14, 62);
+
+                  let y = 70;
+                  materias.forEach((m, i) => {
+                    doc.text(
+                      `${i + 1}. ${m.nombre} | Prerrequisitos: ${m.prerrequisitos.join(', ') || 'Ninguno'} | Disponible: ${m.disponible}`,
+                      14,
+                      y
+                    );
+                    y += 8;
+                    if (y > 270) {
+                      doc.addPage();
+                      y = 20;
+                    }
+                  });
+
+                  doc.save('progreso_curricular_ucn.pdf');
+                }}
+              >
+                Descargar
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
+      {/* contenido */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <ProgressSummary
           completedSubjects={completedSubjects}
