@@ -9,6 +9,10 @@ interface SubjectGridProps {
   onSubjectToggle: (subjectName: string) => void;
   isSubjectAvailable: (subject: Subject) => boolean;
   searchTerm?: string;
+
+  // nuevo: notas por ramo
+  grades: Record<string, number | undefined>;
+  onGradeChange: (subjectName: string, grade: number | '') => void;
 }
 
 const SubjectGrid: React.FC<SubjectGridProps> = ({
@@ -17,8 +21,11 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
   onSubjectClick,
   onSubjectToggle,
   isSubjectAvailable,
-  searchTerm = ''
+  searchTerm = '',
+  grades,
+  onGradeChange
 }) => {
+  // util: colores por semestre
   const getSemesterColorClasses = (semester: number) => {
     const colors = {
       1: 'bg-emerald-50 border-emerald-200 text-emerald-800',
@@ -33,6 +40,7 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
     return colors[semester as keyof typeof colors] || 'bg-slate-50 border-slate-200 text-slate-800';
   };
 
+  // estado visual de la tarjeta
   const getSubjectStatus = (subject: Subject) => {
     const done = completedSubjects.has(subject.name);
     const available = isSubjectAvailable(subject);
@@ -61,6 +69,7 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
     }
   };
 
+  // resaltar busqueda
   const highlightSearchTerm = (text: string, term: string) => {
     if (!term) return text;
     const parts = text.split(new RegExp(`(${term})`, 'gi'));
@@ -71,6 +80,7 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
     );
   };
 
+  // handlers
   const handleSubjectClick = (e: React.MouseEvent, subject: Subject) => {
     e.stopPropagation();
     onSubjectClick(subject);
@@ -96,12 +106,14 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
       {subjects.map((subject, index) => {
         const status = getSubjectStatus(subject);
         const StatusIcon = status.icon;
+        const gradeValue = grades[subject.name];
 
         return (
           <div
             key={`${subject.name}-${index}`}
             className={`p-4 rounded-lg border-2 transition-all duration-200 ${status.classes}`}
           >
+            {/* header de la tarjeta */}
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <h3 className="font-semibold text-base mb-2 leading-tight">
@@ -135,6 +147,7 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
               </button>
             </div>
 
+            {/* linea inferior: estado + ver detalles */}
             <div className="flex justify-between items-center">
               <div className="text-xs opacity-75">
                 {status.status === 'completed' && 'Completada'}
@@ -147,6 +160,28 @@ const SubjectGrid: React.FC<SubjectGridProps> = ({
               >
                 Ver detalles
               </button>
+            </div>
+
+            {/* linea roja: input de nota */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-slate-600">Nota:</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step={0.1}
+                min={1}
+                max={7}
+                placeholder="ej: 5.5"
+                value={gradeValue ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') return onGradeChange(subject.name, '');
+                  const num = Number(v);
+                  if (Number.isNaN(num)) return;
+                  onGradeChange(subject.name, num);
+                }}
+                className="w-20 px-2 py-1 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
           </div>
         );

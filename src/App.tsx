@@ -14,7 +14,10 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [completedSubjects, setCompletedSubjects] = useState<Set<string>>(new Set());
 
-  // utils
+  // notas por ramo
+  const [grades, setGrades] = useState<Record<string, number | undefined>>({});
+
+  // utils de texto
   const norm = (s: string) =>
     (s || '')
       .normalize('NFD')
@@ -30,16 +33,16 @@ function App() {
   const isEmprendimiento = (s: Subject) => norm(s.name).includes('emprendimiento');
   const requiresFirstThreeCompleted = (s: Subject) => isProfessionalElective(s) || isEmprendimiento(s);
 
-  // meta prerrequisito: texto tipo "haber completado todos los semestres anteriores"
+  // meta prerrequisito
   const isMetaAllPrevSemesters = (txt: string) => norm(txt).includes('semestres anteriores');
 
-  // clonar y parchear data sin tocar el json original
+  // preparar data con parches
   const curriculumData = useMemo(() => {
     const clone = JSON.parse(JSON.stringify(baseCurriculumData)) as typeof baseCurriculumData;
 
     Object.values(clone).forEach(sem => {
       sem.subjects = sem.subjects.map(s => {
-        // formaciones generales
+        // parches de formacion general
         if (s.name === 'Formación General Comunicacional II') {
           const reqs = new Set([...(s.prerequisites || [])]);
           reqs.add('Formación General Comunicacional I');
@@ -56,7 +59,7 @@ function App() {
           return { ...s, prerequisites: Array.from(reqs) };
         }
 
-        // parches pedidos
+        // otros parches pedidos
         if (s.name === 'Estadística') {
           const reqs = new Set([...(s.prerequisites || [])]);
           reqs.add('Cálculo II');
@@ -78,7 +81,7 @@ function App() {
 
   const getAllSubjects = (): Subject[] => Object.values(curriculumData).flatMap(s => s.subjects);
 
-  // helper: todos los ramos hasta un semestre estan aprobados
+  // verificar si todos los ramos hasta cierto semestre estan aprobados
   const hasApprovedUpToSemester = (limit: number, completed: Set<string>) => {
     const completedNorm = new Set(Array.from(completed).map(norm));
     return getAllSubjects()
@@ -86,9 +89,8 @@ function App() {
       .every(s => completedNorm.has(norm(s.name)));
   };
 
-  // disponible si cumple reglas globales, meta regla y prerrequisitos reales exactos
+  // disponibilidad de ramo
   const isSubjectAvailable = (subject: Subject): boolean => {
-    // regla global para electivos profesionales y emprendimiento
     if (requiresFirstThreeCompleted(subject) && !hasApprovedUpToSemester(3, completedSubjects)) {
       return false;
     }
@@ -96,12 +98,10 @@ function App() {
     const prereqs = subject.prerequisites || [];
     const hasMeta = prereqs.some(isMetaAllPrevSemesters);
 
-    // meta: si pide "semestres anteriores", validar todos los previos al semestre del ramo
     if (hasMeta && !hasApprovedUpToSemester(subject.semester - 1, completedSubjects)) {
       return false;
     }
 
-    // chequear solo prerrequisitos reales por igualdad estricta
     const realPrereqs = prereqs.filter(pr => !isMetaAllPrevSemesters(pr));
     if (realPrereqs.length === 0) return true;
 
@@ -112,13 +112,12 @@ function App() {
   const handleSubjectClick = (subject: Subject) => setSelectedSubject(subject);
   const handleCloseModal = () => setSelectedSubject(null);
 
-  // cascada al desmarcar, incluyendo la meta regla del capstone
+  // cascada al desmarcar
   const removeDependentSubjects = (toRemove: Set<string>, completed: Set<string>) => {
     let changed = true;
     while (changed) {
       changed = false;
 
-      // regla global 1..3 para electivos y emprendimiento
       if (!hasApprovedUpToSemester(3, completed)) {
         for (const s of getAllSubjects()) {
           if ((isProfessionalElective(s) || isEmprendimiento(s)) && completed.has(s.name)) {
@@ -129,7 +128,6 @@ function App() {
         }
       }
 
-      // dependencias explicitas exactas
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const prereqs = (s.prerequisites || []).filter(pr => !isMetaAllPrevSemesters(pr));
@@ -141,7 +139,6 @@ function App() {
         }
       }
 
-      // meta: si pierde algun ramo previo, capstone y similares caen
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const hasMeta = (s.prerequisites || []).some(isMetaAllPrevSemesters);
@@ -152,7 +149,6 @@ function App() {
         }
       }
 
-      // verificacion final general
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const prereqs = s.prerequisites || [];
@@ -176,12 +172,10 @@ function App() {
     setCompletedSubjects(prev => {
       const next = new Set(prev);
       if (next.has(subjectName)) {
-        // desmarcar -> cascada
         next.delete(subjectName);
         const toRemove = new Set<string>([subjectName]);
         removeDependentSubjects(toRemove, next);
       } else {
-        // marcar -> solo si esta disponible
         const subj = getAllSubjects().find(s => s.name === subjectName);
         if (!subj || !isSubjectAvailable(subj)) return next;
         next.add(subjectName);
@@ -190,39 +184,56 @@ function App() {
     });
   };
 
+  // actualizar nota por ramo con normalizacion y bloqueo si no esta disponible
+  const handleGradeChange = (subjectName: string, grade: number | '') => {
+    const subj = getAllSubjects().find(s => s.name === subjectName);
+    if (!subj || !isSubjectAvailable(subj)) return;
+
+    const sanitize = (g: number) => {
+      let x = g;
+      if (x > 7 && x <= 70) x = x / 10; // 55 -> 5.5
+      if (x > 7) x = 7;
+      if (x < 1) x = 1;
+      return Math.round(x * 10) / 10; // 1 decimal
+    };
+
+    setGrades(prev => {
+      const next = { ...prev };
+      if (grade === '' || Number.isNaN(grade as number)) {
+        delete next[subjectName];
+      } else {
+        next[subjectName] = sanitize(Number(grade));
+      }
+      return next;
+    });
+  };
+
+  // calcular ppa de cada semestre y ppa general (promedio de los ppa)
+  const semesters = Object.values(curriculumData);
+  const semesterStats = semesters.map(sem => {
+    const totalSubjects = sem.subjects.length;
+    const sumGrades = sem.subjects.reduce((acc, s) => acc + (grades[s.name] || 0), 0);
+    const ppa = totalSubjects > 0 ? sumGrades / totalSubjects : 0;
+    return { sem, ppa };
+  });
+  const globalPPA =
+    semesterStats.length > 0
+      ? semesterStats.reduce((acc, s) => acc + s.ppa, 0) / semesterStats.length
+      : 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* header responsive para movil */}
+      {/* header */}
       <header className="bg-white shadow-lg border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          {/* en movil se apila; en sm+ se usa grilla: logo - titulo - escudo */}
           <div className="flex flex-col items-center gap-3 sm:grid sm:grid-cols-[auto,1fr,auto] sm:items-center">
-            {/* logo izq */}
-            <img
-              src="/DISC.2HD.png"
-              alt="logo disc"
-              className="h-10 w-auto sm:h-16 justify-self-start"
-            />
-
-            {/* titulo adaptativo */}
+            <img src="/DISC.2HD.png" alt="logo disc" className="h-10 w-auto sm:h-16 justify-self-start" />
             <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-tight text-center">
               Seguimiento de Progreso Curricular UCN
             </h1>
-
-            {/* escudo der oculto en movil para evitar solapado */}
-            <img
-              src="/Escudo-UCN-Full.png"
-              alt="escudo ucn"
-              className="hidden sm:block h-14 w-auto justify-self-end"
-            />
-
-            {/* fila extra visible en movil: escudo + boton a todo el ancho */}
+            <img src="/Escudo-UCN-Full.png" alt="escudo ucn" className="hidden sm:block h-14 w-auto justify-self-end" />
             <div className="w-full sm:w-auto sm:col-span-3 flex items-center justify-center gap-3">
-              <img
-                src="/Escudo-UCN-Full.png"
-                alt="escudo ucn"
-                className="h-10 w-auto sm:hidden"
-              />
+              <img src="/Escudo-UCN-Full.png" alt="escudo ucn" className="h-10 w-auto sm:hidden" />
               <button
                 className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
                 onClick={() => {
@@ -283,14 +294,15 @@ function App() {
 
         <SearchBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
 
-        {Object.values(curriculumData).map(semester => {
-          const disponibles = semester.subjects.filter(isSubjectAvailable);
+        {semesterStats.map(({ sem, ppa }, idx) => {
+          const disponibles = sem.subjects.filter(isSubjectAvailable);
           const allSelected = disponibles.length > 0 && disponibles.every(s => completedSubjects.has(s.name));
+          const isLast = idx === semesterStats.length - 1;
 
           return (
-            <div key={semester.number} className="mb-8 bg-white rounded-xl shadow-lg p-6 border border-slate-200">
+            <div key={sem.number} className="mb-8 bg-white rounded-xl shadow-lg p-6 border border-slate-200">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-slate-800">Semestre {semester.number}</h2>
+                <h2 className="text-2xl font-bold text-slate-800">Semestre {sem.number}</h2>
 
                 <button
                   className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded shadow text-sm"
@@ -299,12 +311,10 @@ function App() {
                       const next = new Set(prev);
                       const todas = disponibles.every(s => next.has(s.name));
                       if (todas) {
-                        // desmarcar disponibles del semestre + cascada
                         const toRemove = new Set<string>(disponibles.map(s => s.name));
                         disponibles.forEach(s => next.delete(s.name));
                         removeDependentSubjects(toRemove, next);
                       } else {
-                        // marcar solo disponibles del semestre
                         disponibles.forEach(s => next.add(s.name));
                       }
                       return new Set(next);
@@ -316,13 +326,29 @@ function App() {
               </div>
 
               <SubjectGrid
-                subjects={semester.subjects}
+                subjects={sem.subjects}
                 completedSubjects={completedSubjects}
                 onSubjectClick={(s) => handleSubjectClick(s)}
                 onSubjectToggle={(name) => handleSubjectToggle(name)}
                 isSubjectAvailable={isSubjectAvailable}
                 searchTerm={searchTerm}
+                grades={grades}
+                onGradeChange={handleGradeChange}
               />
+
+              {/* linea inferior: ppa semestre (azul) en todos; ppa general (verde) solo en el ultimo */}
+              <div className="mt-4 flex justify-end gap-3">
+                {isLast && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 border border-green-200 text-green-700">
+                    <span className="text-sm font-medium">PPA general</span>
+                    <span className="text-lg font-bold">{globalPPA.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700">
+                  <span className="text-sm font-medium">PPA semestre</span>
+                  <span className="text-lg font-bold">{ppa.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           );
         })}
