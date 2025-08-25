@@ -10,5 +10,5 @@ ReactDOM.createRoot(rootEl).render(
   </React.StrictMode>
 )
 
-// (opcional) si por alguna razón queda el boot, lo removemos
+// (opcional) si por alguna razon queda el boot, lo removemos
 queueMicrotask(() => document.getElementById('boot')?.remove())

@@ -89,8 +89,19 @@ function App() {
       .every(s => completedNorm.has(norm(s.name)));
   };
 
+  // nuevo helper: verificar si hay al menos un ramo aprobado en un semestre dado
+  const hasAnyApprovedInSemester = (semNumber: number, completed: Set<string>) => {
+    const completedNorm = new Set(Array.from(completed).map(norm));
+    return getAllSubjects().some(s => s.semester === semNumber && completedNorm.has(norm(s.name)));
+  };
+
   // disponibilidad de ramo
   const isSubjectAvailable = (subject: Subject): boolean => {
+    // prerequisito fantasma: programacion requiere >= 1 ramo aprobado del semestre 1
+    if (eq(subject.name, 'Programación') && !hasAnyApprovedInSemester(1, completedSubjects)) {
+      return false;
+    }
+
     if (requiresFirstThreeCompleted(subject) && !hasApprovedUpToSemester(3, completedSubjects)) {
       return false;
     }
@@ -118,6 +129,7 @@ function App() {
     while (changed) {
       changed = false;
 
+      // cascada para regla de 3 primeros semestres (electivo prof / emprendimiento)
       if (!hasApprovedUpToSemester(3, completed)) {
         for (const s of getAllSubjects()) {
           if ((isProfessionalElective(s) || isEmprendimiento(s)) && completed.has(s.name)) {
@@ -128,6 +140,18 @@ function App() {
         }
       }
 
+      // cascada para prerequisito fantasma de programacion: si ya no hay ramos aprobados del sem 1, se quita
+      if (!hasAnyApprovedInSemester(1, completed)) {
+        for (const s of getAllSubjects()) {
+          if (eq(s.name, 'Programación') && completed.has(s.name)) {
+            completed.delete(s.name);
+            toRemove.add(s.name);
+            changed = true;
+          }
+        }
+      }
+
+      // reglas normales: si un ramo deja de cumplir sus prerequisitos reales, se desmarca
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const prereqs = (s.prerequisites || []).filter(pr => !isMetaAllPrevSemesters(pr));
@@ -139,6 +163,7 @@ function App() {
         }
       }
 
+      // reglas meta: "semestres anteriores"
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const hasMeta = (s.prerequisites || []).some(isMetaAllPrevSemesters);
@@ -149,6 +174,7 @@ function App() {
         }
       }
 
+      // regla combinada general
       for (const s of getAllSubjects()) {
         if (!completed.has(s.name)) continue;
         const prereqs = s.prerequisites || [];
